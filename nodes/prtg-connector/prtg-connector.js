@@ -24,11 +24,12 @@ module.exports = function (RED) {
             }   
         }
 
-        var sendToPRTG=function(results, messageText){
+        var sendToPRTG=function(results, messageText, error){
             var outObj = {
                 "prtg": {
                     "result": results,
-                    "text":  messageText || "Last update: "+(new Date()).toISOString()
+                    "text":  messageText || "Last update: "+(new Date()).toISOString(),
+                    "error": error
                 }
             }
             var post_data = JSON.stringify(outObj)
@@ -110,13 +111,41 @@ module.exports = function (RED) {
                 node.log('\tresolvedUnit :\t\t->\t' + resolvedUnit);    
                 node.log('\tresolvedChannelName\t->\t' + JSON.stringify(resolvedChannelName))
                 let resolvedValue = getNested(msg, channelKey)
+
+                let notify = 0;
+                if(typeof msg.statusMsg !== 'undefined')
+                    if(typeof msg.statusMsg.notify !== 'undefined') 
+				        notify = Number(msg.statusMsg.notify);
+                
+                let warning =  0;
+                if(typeof msg.statusMsg !== 'undefined')
+                    if(typeof msg.statusMsg.warning !== 'undefined') 
+                        warning = Number(msg.statusMsg.warning);
+
+                node.log('\twarning status\t->\t' + warning);
+                node.log('\tnotify status\t->\t' + notify);
+                
                 node.log('\tresolvedValue\t->\t' + JSON.stringify(resolvedValue))
-                let resultObj = {
-                    channel: resolvedChannelName,
-                    value: resolvedValue,
-                    float: "1",
-                    unit: "custom",
-                    customunit: resolvedUnit
+                let resultObj = {}
+                if (0 == notify){
+                    resultObj = {
+                        channel: resolvedChannelName,
+                        value: resolvedValue,
+                        float: "1",
+                        warning: warning,
+                        unit: "custom",
+                        customunit: resolvedUnit
+                    }
+                } else {
+                    resultObj = {
+                        channel: resolvedChannelName,
+                        value: resolvedValue,
+                        float: "1",
+                        warning: warning,
+                        notifychanged: "",
+                        unit: "custom",
+                        customunit: resolvedUnit
+                    }
                 }
                 dataContainer.push(resultObj)
                 node.log('next...')
@@ -135,13 +164,19 @@ module.exports = function (RED) {
             node.log('messageText:' + messageText)
             node.log('messageType:' + config.messageType)
 
+            let error = 0;
+            if(typeof msg.statusMsg !== 'undefined')
+                if(typeof msg.statusMsg.error !== 'undefined') 
+		            error = Number(msg.statusMsg.error);           
+            node.log('error:' + error);
+
             oldIdToken = config.idtoken;
             if ((config.idtoken || "").indexOf("{{") != -1) {
                 node.log('parsed token-ID from: ' + config.idtoken);
                 config.idtoken = mustache.render(config.idtoken, msg);
 				node.log('parsed token-ID to new token-ID: ' + config.idtoken);
 			}
-            sendToPRTG(dataContainer, messageText)
+            sendToPRTG(dataContainer, messageText, error)
             //reset id to old state:
             config.idtoken  = oldIdToken;
         });
